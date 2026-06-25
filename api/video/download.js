@@ -1,7 +1,7 @@
 /**
  * @author Rocky
  * YouTube Video Download API
- * Uses yt-dlp-api (self-hosted style via public endpoints)
+ * Uses RapidAPI - YouTube MP4 Downloader
  */
 
 module.exports = async (req, res) => {
@@ -22,155 +22,97 @@ module.exports = async (req, res) => {
 
   if (!videoId) return res.status(400).json({ error: "Invalid video ID" });
 
-  try {
-    // Use savefrom.net API - works from server side
-    const result = await trySavefrom(videoId);
-    if (result && result.downloadLink) {
-      return res.status(200).json({ ...result, author: "Rocky" });
-    }
-  } catch (e) {
-    console.error("savefrom failed:", e.message);
+  const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
+  if (!RAPIDAPI_KEY) {
+    return res.status(500).json({ error: "RAPIDAPI_KEY not set" });
   }
 
-  try {
-    const result = await trySSYoutube(videoId);
-    if (result && result.downloadLink) {
-      return res.status(200).json({ ...result, author: "Rocky" });
+  // Try multiple RapidAPI YouTube download endpoints
+  const apis = [
+    () => tryYtStream(videoId, RAPIDAPI_KEY),
+    () => tryYoutubeDownloader(videoId, RAPIDAPI_KEY),
+    () => tryYtMp4(videoId, RAPIDAPI_KEY),
+  ];
+
+  for (const api of apis) {
+    try {
+      const result = await api();
+      if (result && result.downloadLink) {
+        return res.status(200).json({ ...result, author: "Rocky" });
+      }
+    } catch (e) {
+      console.error("API failed:", e.message);
     }
-  } catch (e) {
-    console.error("ssyoutube failed:", e.message);
   }
 
-  try {
-    const result = await tryInvidiousPublic(videoId);
-    if (result && result.downloadLink) {
-      return res.status(200).json({ ...result, author: "Rocky" });
-    }
-  } catch (e) {
-    console.error("invidious failed:", e.message);
-  }
-
-  return res.status(500).json({
-    error: "All download methods failed",
-    videoId,
-    tip: "Try updating the API or use a different video",
-  });
+  return res.status(500).json({ error: "All download methods failed" });
 };
 
-// ── Method 1: SaveFrom ──────────────────────────────────────────────────────
-async function trySavefrom(videoId) {
-  const url = `https://worker.sf-tools.com/savefrom.php`;
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(), 10000);
-
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      "Origin": "https://en.savefrom.net",
-      "Referer": "https://en.savefrom.net/",
-    },
-    body: `sf_url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D${videoId}&country=us`,
-    signal: controller.signal,
-  });
-
-  const data = await r.json();
-  if (!data || data.error) throw new Error("SaveFrom error");
-
-  const links = data.url || [];
-  const mp4Links = links
-    .filter(l => l.ext === "mp4" && l.url)
-    .sort((a, b) => parseInt(b.quality) - parseInt(a.quality));
-
-  if (!mp4Links.length) throw new Error("No mp4 links");
-
-  const best = mp4Links[0];
-  return {
-    title: data.meta?.title || "YouTube Video",
-    videoId,
-    thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-    quality: best.quality + "p" || "360p",
-    downloadLink: best.url,
-    source: "savefrom",
-  };
-}
-
-// ── Method 2: SSYoutube ─────────────────────────────────────────────────────
-async function trySSYoutube(videoId) {
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(), 10000);
-
-  // Get video info first
-  const infoRes = await fetch(
-    `https://ssyoutube.com/api/convert?url=https://www.youtube.com/watch?v=${videoId}`,
+// ── API 1: yt-stream ────────────────────────────────────────────────────────
+async function tryYtStream(videoId, key) {
+  const r = await fetch(
+    `https://yt-stream.p.rapidapi.com/api/get?url=https://www.youtube.com/watch?v=${videoId}&quality=720&type=mp4`,
     {
       headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://ssyoutube.com/",
+        "x-rapidapi-host": "yt-stream.p.rapidapi.com",
+        "x-rapidapi-key": key,
       },
-      signal: controller.signal,
     }
   );
-
-  const data = await infoRes.json();
-  if (!data || !data.links) throw new Error("SSYoutube no links");
-
-  const mp4 = (data.links["mp4"] || [])
-    .filter(l => l.url)
-    .sort((a, b) => parseInt(b.quality) - parseInt(a.quality));
-
-  if (!mp4.length) throw new Error("No mp4");
-
+  const data = await r.json();
+  if (!data || !data.url) throw new Error("yt-stream failed");
   return {
     title: data.title || "YouTube Video",
     videoId,
     thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-    quality: mp4[0].quality || "360p",
-    downloadLink: mp4[0].url,
-    source: "ssyoutube",
+    quality: "720p",
+    downloadLink: data.url,
+    source: "yt-stream",
   };
 }
 
-// ── Method 3: Invidious public instances ───────────────────────────────────
-async function tryInvidiousPublic(videoId) {
-  const instances = [
-    "https://inv.nadeko.net",
-    "https://invidious.privacyredirect.com",
-    "https://iv.datura.network",
-    "https://invidious.nerdvpn.de",
-    "https://yt.cdaut.de",
-    "https://invidious.io.lol",
-  ];
+// ── API 2: youtube-downloader10 ─────────────────────────────────────────────
+async function tryYoutubeDownloader(videoId, key) {
+  const r = await fetch(
+    `https://youtube-downloader10.p.rapidapi.com/download?id=${videoId}`,
+    {
+      headers: {
+        "x-rapidapi-host": "youtube-downloader10.p.rapidapi.com",
+        "x-rapidapi-key": key,
+      },
+    }
+  );
+  const data = await r.json();
+  if (!data || !data.link) throw new Error("youtube-downloader10 failed");
+  return {
+    title: data.title || "YouTube Video",
+    videoId,
+    thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+    quality: data.quality || "720p",
+    downloadLink: data.link,
+    source: "youtube-downloader10",
+  };
+}
 
-  for (const base of instances) {
-    try {
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(), 7000);
-
-      const r = await fetch(`${base}/api/v1/videos/${videoId}`, {
-        headers: { "User-Agent": "Mozilla/5.0" },
-        signal: controller.signal,
-      });
-
-      if (!r.ok) continue;
-      const data = await r.json();
-
-      const streams = (data.formatStreams || [])
-        .filter(f => f.container === "mp4")
-        .sort((a, b) => parseInt(b.resolution) - parseInt(a.resolution));
-
-      if (streams.length > 0) {
-        return {
-          title: data.title || "YouTube Video",
-          videoId,
-          thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-          quality: streams[0].qualityLabel || "360p",
-          downloadLink: streams[0].url,
-          source: `invidious`,
-        };
-      }
-    } catch (_) { continue; }
-  }
-  throw new Error("All Invidious failed");
+// ── API 3: ytmp3-youtube-mp3-and-mp4-downloader ─────────────────────────────
+async function tryYtMp4(videoId, key) {
+  const r = await fetch(
+    `https://ytmp3-youtube-mp3-and-mp4-downloader.p.rapidapi.com/api/ytmp4.php?url=https://www.youtube.com/watch?v=${videoId}`,
+    {
+      headers: {
+        "x-rapidapi-host": "ytmp3-youtube-mp3-and-mp4-downloader.p.rapidapi.com",
+        "x-rapidapi-key": key,
+      },
+    }
+  );
+  const data = await r.json();
+  if (!data || !data.dlink) throw new Error("ytmp3 failed");
+  return {
+    title: data.title || "YouTube Video",
+    videoId,
+    thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+    quality: "720p",
+    downloadLink: data.dlink,
+    source: "ytmp3",
+  };
 }
