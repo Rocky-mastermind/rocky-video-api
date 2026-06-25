@@ -26,9 +26,8 @@ module.exports = async (req, res) => {
   if (!RAPIDAPI_KEY) return res.status(500).json({ error: "RAPIDAPI_KEY not set" });
 
   try {
-    // Use mp4 format instead of mp3
     const r = await fetch(
-      `https://youtube-info-download-api.p.rapidapi.com/ajax/download.php?format=mp4&add_info=0&url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D${videoId}&audio_quality=128&allow_extended_duration=false&no_merge=false&audio_language=en`,
+      `https://youtube-info-download-api.p.rapidapi.com/ajax/download.php?format=mp3&add_info=0&url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D${videoId}&audio_quality=128&allow_extended_duration=false&no_merge=false&audio_language=en`,
       {
         method: "GET",
         headers: {
@@ -40,62 +39,40 @@ module.exports = async (req, res) => {
     );
 
     const data = await r.json();
+    console.log("API response:", JSON.stringify(data).slice(0, 300));
 
-    // Extract download link from response
+    if (!data) throw new Error("No response");
+
+    // Find best mp4 link
     let downloadLink = null;
     let title = "YouTube Video";
-    let quality = "360p";
+    let quality = "720p";
 
-    if (data.url) {
-      downloadLink = data.url;
-    } else if (data.link) {
+    if (data.link) {
       downloadLink = data.link;
-    } else if (data.content) {
-      // Parse content field which may contain the URL
-      const match = data.content.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/);
-      if (match) downloadLink = match[0];
-    } else if (data.progress_url) {
-      // Some APIs return a progress URL to poll
-      downloadLink = data.progress_url;
+    } else if (data.url) {
+      downloadLink = data.url;
+    } else if (data.links) {
+      const mp4 = Object.entries(data.links)
+        .filter(([k, v]) => typeof v === "string" && v.includes("http"))
+        .map(([k, v]) => ({ quality: k, url: v }));
+      if (mp4.length > 0) {
+        downloadLink = mp4[0].url;
+        quality = mp4[0].quality;
+      }
+    } else if (Array.isArray(data)) {
+      const mp4 = data.find(d => d.ext === "mp4" || d.format?.includes("mp4"));
+      if (mp4) downloadLink = mp4.url || mp4.link;
     }
 
     if (data.title) title = data.title;
     if (data.quality) quality = data.quality;
 
     if (!downloadLink) {
-      // Try to get info endpoint instead
-      const infoR = await fetch(
-        `https://youtube-info-download-api.p.rapidapi.com/ajax/info.php?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D${videoId}`,
-        {
-          headers: {
-            "x-rapidapi-host": "youtube-info-download-api.p.rapidapi.com",
-            "x-rapidapi-key": RAPIDAPI_KEY,
-          },
-        }
-      );
-      const infoData = await infoR.json();
-
-      // Find mp4 format from info
-      const formats = infoData.formats || infoData.links || [];
-      const mp4Formats = Array.isArray(formats)
-        ? formats.filter(f => (f.ext || f.format || "").includes("mp4") && f.url)
-        : Object.entries(formats)
-            .filter(([k]) => k.includes("mp4"))
-            .map(([k, v]) => ({ quality: k, url: v }));
-
-      if (mp4Formats.length > 0) {
-        const best = mp4Formats[0];
-        downloadLink = best.url;
-        quality = best.quality || best.qualityLabel || "360p";
-        title = infoData.title || title;
-      }
-
-      if (!downloadLink) {
-        return res.status(500).json({
-          error: "Could not find mp4 download link",
-          debug: { downloadData: data, infoData },
-        });
-      }
+      return res.status(500).json({ 
+        error: "No download link in response",
+        raw: data 
+      });
     }
 
     return res.status(200).json({
