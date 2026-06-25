@@ -4,8 +4,6 @@
  * Route: /api/video/download?link=<videoID>&format=mp4
  */
 
-const ytdl = require("@distube/ytdl-core");
-
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -15,62 +13,74 @@ module.exports = async (req, res) => {
   if (req.method !== "GET")
     return res.status(405).json({ error: "Method Not Allowed" });
 
-  const { link, format = "mp4" } = req.query;
+  const { link } = req.query;
 
   if (!link) {
     return res.status(400).json({ error: "Missing query param: link (video ID or URL)" });
   }
 
-  const videoUrl = link.startsWith("http")
-    ? link
-    : `https://www.youtube.com/watch?v=${link}`;
+  const videoId = link.startsWith("http")
+    ? (link.match(/(?:v=|youtu\.be\/)([\w-]{11})/) || [])[1]
+    : link;
+
+  if (!videoId) {
+    return res.status(400).json({ error: "Invalid YouTube video ID or URL" });
+  }
 
   try {
-    const info = await ytdl.getInfo(videoUrl);
-    const title = info.videoDetails.title;
-    const lengthSeconds = parseInt(info.videoDetails.lengthSeconds);
+    const rapidApiKey = process.env.RAPIDAPI_KEY;
 
-    // Pick best mp4 format with both video+audio
-    let selectedFormat;
+    if (!rapidApiKey) {
+      return res.status(500).json({ error: "RAPIDAPI_KEY not set in environment variables" });
+    }
 
-    if (format === "mp4") {
-      // Try combined formats first (video + audio in one)
-      const combinedFormats = ytdl.filterFormats(info.formats, "videoandaudio")
-        .filter(f => f.container === "mp4")
-        .sort((a, b) => (parseInt(b.bitrate) || 0) - (parseInt(a.bitrate) || 0));
-
-      if (combinedFormats.length > 0) {
-        selectedFormat = combinedFormats[0];
-      } else {
-        // Fallback to any mp4 video format
-        const videoFormats = info.formats
-          .filter(f => f.container === "mp4" && f.hasVideo)
-          .sort((a, b) => (parseInt(b.bitrate) || 0) - (parseInt(a.bitrate) || 0));
-        selectedFormat = videoFormats[0];
+    const response = await fetch(
+      `https://youtube-video-and-shorts-downloader.p.rapidapi.com/download.php?id=${videoId}`,
+      {
+        method: "GET",
+        headers: {
+          "x-rapidapi-host": "youtube-video-and-shorts-downloader.p.rapidapi.com",
+          "x-rapidapi-key": rapidApiKey,
+        },
       }
-    } else {
-      // Audio only (mp3 via webm)
-      const audioFormats = ytdl.filterFormats(info.formats, "audioonly")
-        .sort((a, b) => (parseInt(b.audioBitrate) || 0) - (parseInt(a.audioBitrate) || 0));
-      selectedFormat = audioFormats[0];
+    );
+
+    const data = await response.json();
+
+    if (!data || data.error) {
+      return res.status(500).json({ error: "Failed to fetch download links", details: data?.error || "Unknown error" });
     }
 
-    if (!selectedFormat) {
-      return res.status(404).json({ error: "No suitable format found" });
+    const links = data.links || {};
+    const mp4Links = [];
+
+    for (const [quality, url] of Object.entries(links)) {
+      if (typeof url === "string" && url.startsWith("http")) {
+        mp4Links.push({ quality, url });
+      }
     }
 
-    const quality = selectedFormat.qualityLabel || selectedFormat.audioBitrate + "kbps" || "unknown";
+    const qualityOrder = ["1080p", "720p", "480p", "360p", "240p", "144p"];
+    mp4Links.sort((a, b) => {
+      const ai = qualityOrder.indexOf(a.quality);
+      const bi = qualityOrder.indexOf(b.quality);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+
+    const best = mp4Links[0];
+
+    if (!best) {
+      return res.status(404).json({ error: "No download link found for this video" });
+    }
 
     return res.status(200).json({
-      title,
-      videoId: info.videoDetails.videoId,
-      url: `https://www.youtube.com/watch?v=${info.videoDetails.videoId}`,
-      thumbnail: info.videoDetails.thumbnails.slice(-1)[0]?.url || "",
-      duration: lengthSeconds,
-      quality,
-      format: selectedFormat.container,
-      downloadLink: selectedFormat.url,
-      author: info.videoDetails.author.name,
+      title: data.title || "YouTube Video",
+      videoId,
+      thumbnail: data.thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+      quality: best.quality,
+      downloadLink: best.url,
+      allQualities: mp4Links,
+      author: "Rocky",
     });
 
   } catch (err) {
