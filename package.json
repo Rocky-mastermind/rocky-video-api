@@ -1,12 +1,10 @@
 {
   "name": "rocky-video-api",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "YouTube Video Search & Download API by Rocky",
   "author": "Rocky",
   "license": "MIT",
-  "dependencies": {
-    "googleapis": "^144.0.0"
-  },
+  "dependencies": {},
   "engines": {
     "node": ">=18.x"
   }
