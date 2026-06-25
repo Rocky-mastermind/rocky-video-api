@@ -2,14 +2,8 @@
  * @author Rocky
  * YouTube Video Search API
  * Route: /api/video/search?songName=<query>
+ * Uses YouTube Data API v3
  */
-
-const { google } = require("googleapis");
-
-const youtube = google.youtube({
-  version: "v3",
-  auth: process.env.YOUTUBE_API_KEY,
-});
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -21,20 +15,25 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: "Method Not Allowed" });
 
   const { songName } = req.query;
-
   if (!songName) {
     return res.status(400).json({ error: "Missing query param: songName" });
   }
 
-  try {
-    const searchResponse = await youtube.search.list({
-      part: ["snippet"],
-      q: songName,
-      maxResults: 10,
-      type: ["video"],
-    });
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: "YOUTUBE_API_KEY not set in environment variables" });
+  }
 
-    const results = searchResponse.data.items.map((item) => ({
+  try {
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(songName)}&maxResults=10&type=video&key=${apiKey}`;
+    const r = await fetch(url);
+    const data = await r.json();
+
+    if (data.error) {
+      return res.status(500).json({ error: "YouTube API error", details: data.error.message });
+    }
+
+    const results = data.items.map((item) => ({
       id: item.id.videoId,
       title: item.snippet.title,
       channel: item.snippet.channelTitle,
@@ -45,7 +44,6 @@ module.exports = async (req, res) => {
 
     return res.status(200).json(results);
   } catch (err) {
-    console.error("Search error:", err.message);
     return res.status(500).json({ error: "Failed to search videos", details: err.message });
   }
 };
