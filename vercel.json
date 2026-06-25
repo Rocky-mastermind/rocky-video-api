@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "name": "rocky-video-api",
+  "routes": [
+    {
+      "src": "/api/video/search",
+      "dest": "/api/video/search.js"
+    },
+    {
+      "src": "/api/video/download",
+      "dest": "/api/video/download.js"
+    },
+    {
+      "src": "/api",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/",
+      "dest": "/api/index.js"
+    }
+  ]
+}
