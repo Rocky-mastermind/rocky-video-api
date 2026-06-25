@@ -1,0 +1,14 @@
+{
+  "name": "rocky-video-api",
+  "version": "1.0.0",
+  "description": "YouTube Video Search & Download API by Rocky",
+  "author": "Rocky",
+  "license": "MIT",
+  "dependencies": {
+    "@distube/ytdl-core": "^4.16.8",
+    "googleapis": "^144.0.0"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
+}
