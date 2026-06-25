@@ -5,7 +5,6 @@
   "author": "Rocky",
   "license": "MIT",
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.8",
     "googleapis": "^144.0.0"
   },
   "engines": {
