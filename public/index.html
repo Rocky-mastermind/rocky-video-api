@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Rocky Video API</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      font-family: 'Segoe UI', sans-serif;
+      color: #fff;
+    }
+
+    /* HEADER */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 22px 30px;
+      background: rgba(255,255,255,0.05);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px);
+    }
+    header img {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 2px solid #a78bfa;
+      object-fit: cover;
+    }
+    header .brand h1 { font-size: 1.4rem; color: #c4b5fd; }
+    header .brand p  { font-size: 0.78rem; color: #94a3b8; }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      padding: 50px 20px 30px;
+    }
+    .hero h2 {
+      font-size: 2rem;
+      background: linear-gradient(90deg, #a78bfa, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    .hero p { color: #94a3b8; font-size: 0.95rem; }
+
+    /* SEARCH BOX */
+    .search-wrap {
+      max-width: 640px;
+      margin: 30px auto 10px;
+      padding: 0 20px;
+      display: flex;
+      gap: 10px;
+    }
+    .search-wrap input {
+      flex: 1;
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: 1.5px solid rgba(167,139,250,0.4);
+      background: rgba(255,255,255,0.07);
+      color: #fff;
+      font-size: 1rem;
+      outline: none;
+      transition: border 0.2s;
+    }
+    .search-wrap input::placeholder { color: #64748b; }
+    .search-wrap input:focus { border-color: #a78bfa; }
+    .search-wrap button {
+      padding: 14px 22px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .search-wrap button:hover { opacity: 0.85; }
+    .search-wrap button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* STATUS */
+    #status {
+      text-align: center;
+      font-size: 0.9rem;
+      color: #94a3b8;
+      min-height: 24px;
+      margin-bottom: 10px;
+    }
+
+    /* RESULTS */
+    #results {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 10px 20px 60px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      display: flex;
+      gap: 14px;
+      padding: 14px;
+      align-items: flex-start;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .card:hover { transform: translateY(-2px); background: rgba(255,255,255,0.09); }
+
+    .card img {
+      width: 140px;
+      height: 85px;
+      object-fit: cover;
+      border-radius: 10px;
+      flex-shrink: 0;
+      background: #1e1b4b;
+    }
+
+    .card-info { flex: 1; min-width: 0; }
+    .card-info h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 4px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .card-info .channel {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      margin-bottom: 10px;
+    }
+
+    .dl-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      color: #fff;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .dl-btn:hover { opacity: 0.85; }
+    .dl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .dl-btn.loading { background: #374151; }
+
+    /* FOOTER */
+    footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 0.78rem;
+      color: #475569;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+    footer span { color: #a78bfa; }
+  </style>
+</head>
+<body>
+
+<header>
+  <img src="https://i.imgur.com/NdnkE7H.jpeg" alt="Rocky Logo" onerror="this.style.display='none'"/>
+  <div class="brand">
+    <h1>Rocky Video API</h1>
+    <p>by Rocky Chowdhury • YouTube Downloader</p>
+  </div>
+</header>
+
+<div class="hero">
+  <h2>🎬 YouTube Video Downloader</h2>
+  <p>Search any video and download it instantly</p>
+</div>
+
+<div class="search-wrap">
+  <input type="text" id="query" placeholder="Search video or paste YouTube link..." />
+  <button id="searchBtn" onclick="searchVideos()">Search</button>
+</div>
+
+<p id="status"></p>
+<div id="results"></div>
+
+<footer>
+  Powered by <span>Rocky Video API</span> • Made by <span>Rocky Chowdhury</span>
+</footer>
+
+<script>
+  // ✅ Set your Vercel API URL here
+  const API_BASE = window.location.origin;
+
+  const queryInput = document.getElementById("query");
+  const searchBtn  = document.getElementById("searchBtn");
+  const statusEl   = document.getElementById("status");
+  const resultsEl  = document.getElementById("results");
+
+  queryInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") searchVideos();
+  });
+
+  async function searchVideos() {
+    const q = queryInput.value.trim();
+    if (!q) return;
+
+    // Check if YouTube link
+    const ytMatch = q.match(/(?:v=|youtu\.be\/)([\w-]{11})/);
+    if (ytMatch) {
+      downloadDirect(ytMatch[1], "YouTube Video", "");
+      return;
+    }
+
+    searchBtn.disabled = true;
+    statusEl.textContent = "🔍 Searching...";
+    resultsEl.innerHTML = "";
+
+    try {
+      const res  = await fetch(`${API_BASE}/api/video/search?songName=${encodeURIComponent(q)}`);
+      const data = await res.json();
+
+      if (!data || data.error) {
+        statusEl.textContent = "❌ " + (data.error || "Search failed");
+        return;
+      }
+
+      statusEl.textContent = `✅ Found ${data.length} results`;
+      data.forEach(v => renderCard(v));
+    } catch (e) {
+      statusEl.textContent = "❌ Error: " + e.message;
+    } finally {
+      searchBtn.disabled = false;
+    }
+  }
+
+  function renderCard(v) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <img src="${v.thumbnail}" alt="thumb" loading="lazy"/>
+      <div class="card-info">
+        <h3>${escHtml(v.title)}</h3>
+        <div class="channel">📺 ${escHtml(v.channel)}</div>
+        <button class="dl-btn" id="btn-${v.id}" onclick="downloadVideo('${v.id}', this, '${escAttr(v.title)}')">
+          ⬇️ Download MP4
+        </button>
+      </div>`;
+    resultsEl.appendChild(card);
+  }
+
+  async function downloadDirect(id, title, thumb) {
+    statusEl.textContent = "⏳ Getting download link...";
+    try {
+      const res  = await fetch(`${API_BASE}/api/video/download?link=${id}&format=mp4`);
+      const data = await res.json();
+      if (data.downloadLink) {
+        statusEl.textContent = "✅ Ready! Starting download...";
+        triggerDownload(data.downloadLink, data.title || title);
+      } else {
+        statusEl.textContent = "❌ " + (data.error || "Download failed");
+      }
+    } catch (e) {
+      statusEl.textContent = "❌ " + e.message;
+    }
+  }
+
+  async function downloadVideo(id, btn, title) {
+    btn.disabled = true;
+    btn.className = "dl-btn loading";
+    btn.textContent = "⏳ Getting link...";
+
+    try {
+      const res  = await fetch(`${API_BASE}/api/video/download?link=${id}&format=mp4`);
+      const data = await res.json();
+
+      if (data.downloadLink) {
+        btn.textContent = "✅ Opening...";
+        triggerDownload(data.downloadLink, data.title || title);
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.className = "dl-btn";
+          btn.innerHTML = "⬇️ Download MP4";
+        }, 3000);
+      } else {
+        btn.textContent = "❌ Failed";
+        btn.className = "dl-btn";
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.innerHTML = "⬇️ Download MP4";
+        }, 2000);
+      }
+    } catch (e) {
+      btn.textContent = "❌ Error";
+      btn.className = "dl-btn";
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = "⬇️ Download MP4";
+      }, 2000);
+    }
+  }
+
+  function triggerDownload(url, filename) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (filename || "video") + ".mp4";
+    a.target = "_blank";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+  function escAttr(s) {
+    return String(s).replace(/'/g,"\\'").replace(/"/g,"&quot;");
+  }
+</script>
+</body>
+</html>
